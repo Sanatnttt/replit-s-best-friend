@@ -14,8 +14,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ['Orbitron', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -88,35 +87,16 @@ export default {
           from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
-        "slide-in-right": {
-          from: { transform: "translateX(100%)" },
-          to: { transform: "translateX(0)" },
-        },
-        "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px hsl(180 100% 50% / 0.3)" },
-          "50%": { boxShadow: "0 0 40px hsl(180 100% 50% / 0.6)" },
-        },
-        "scan": {
-          from: { transform: "translateY(-100%)" },
-          to: { transform: "translateY(100%)" },
-        },
-        "typing": {
-          from: { width: "0" },
-          to: { width: "100%" },
+        "pulse-dot": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "1" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.5s ease-out forwards",
-        "slide-in-right": "slide-in-right 0.3s ease-out",
-        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
-        "scan": "scan 3s linear infinite",
-        "typing": "typing 2s steps(40) infinite",
-      },
-      backgroundImage: {
-        'cyber-gradient': 'linear-gradient(135deg, hsl(180 100% 50% / 0.1) 0%, hsl(320 100% 60% / 0.1) 100%)',
-        'neon-gradient': 'linear-gradient(90deg, hsl(180 100% 50%), hsl(320 100% 60%))',
+        "fade-in": "fade-in 0.3s ease-out forwards",
+        "pulse-dot": "pulse-dot 1.5s ease-in-out infinite",
       },
     },
   },
