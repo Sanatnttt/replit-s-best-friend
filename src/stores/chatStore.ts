@@ -15,8 +15,10 @@ export interface ExecutionStep {
   action: string;
   target?: string;
   value?: string;
+  description?: string;
   status: 'pending' | 'running' | 'complete' | 'error';
   message?: string;
+  screenshot?: string;
 }
 
 export interface Chat {
@@ -32,6 +34,8 @@ interface ChatState {
   activeChatId: string | null;
   isLoading: boolean;
   isSidebarOpen: boolean;
+  localServerUrl: string;
+  isLocalServerConnected: boolean;
 
   // Actions
   createChat: () => string;
@@ -42,6 +46,8 @@ interface ChatState {
   updateChatTitle: (chatId: string, title: string) => void;
   toggleSidebar: () => void;
   setLoading: (loading: boolean) => void;
+  setLocalServerUrl: (url: string) => void;
+  checkLocalServer: () => Promise<boolean>;
 
   // AI execution
   sendMessage: (content: string) => Promise<void>;
@@ -52,6 +58,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeChatId: null,
   isLoading: false,
   isSidebarOpen: false,
+  localServerUrl: 'http://localhost:3001',
+  isLocalServerConnected: false,
 
   createChat: () => {
     const chatId = crypto.randomUUID();
@@ -136,8 +144,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoading: loading });
   },
 
+  setLocalServerUrl: (url) => {
+    set({ localServerUrl: url });
+  },
+
+  checkLocalServer: async () => {
+    const { localServerUrl } = get();
+    try {
+      const response = await fetch(localServerUrl, { 
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      });
+      const connected = response.ok;
+      set({ isLocalServerConnected: connected });
+      return connected;
+    } catch {
+      set({ isLocalServerConnected: false });
+      return false;
+    }
+  },
+
   sendMessage: async (content) => {
-    const { activeChatId, createChat, addMessage, updateMessage, setLoading, chats } = get();
+    const { activeChatId, createChat, addMessage, updateMessage, setLoading, localServerUrl, checkLocalServer } = get();
     
     // Create chat if none exists
     let chatId = activeChatId;
@@ -174,6 +202,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setLoading(true);
 
     try {
+      // Check if local server is running
+      const isConnected = await checkLocalServer();
+
       // Get chat history
       const currentChat = get().chats.find((c) => c.id === chatId);
       const history = currentChat?.messages.slice(0, -1).map((m) => ({
@@ -196,6 +227,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         action: step.action,
         target: step.target,
         value: step.value,
+        description: step.description,
         status: 'pending' as const,
       }));
 
@@ -205,7 +237,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         executionSteps: steps,
       });
 
-      // Execute each step
+      if (!isConnected) {
+        updateMessage(chatId, assistantMessageId, {
+          content: `${planData.thinking || 'Here is my plan.'}\n\n⚠️ **Local server not running!**\n\nTo execute these steps, start the local server:\n\`\`\`\ncd local-server\nnpm install\nnpm start\n\`\`\``,
+          isExecuting: false,
+        });
+        return;
+      }
+
+      // Execute each step via local server
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         
@@ -214,39 +254,49 @@ export const useChatStore = create<ChatState>((set, get) => ({
         updateMessage(chatId, assistantMessageId, { executionSteps: [...steps] });
 
         try {
-          const { data: execData, error: execError } = await supabase.functions.invoke('agent-execute', {
-            body: { step, chatId },
+          const response = await fetch(`${localServerUrl}/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ step, sessionId: chatId }),
           });
 
-          if (execError) throw execError;
+          const result = await response.json();
 
-          steps[i].status = execData.success ? 'complete' : 'error';
-          steps[i].message = execData.message || execData.error;
+          steps[i].status = result.success ? 'complete' : 'error';
+          steps[i].message = result.message;
+          steps[i].screenshot = result.screenshot;
         } catch (err: any) {
           steps[i].status = 'error';
-          steps[i].message = err.message;
+          steps[i].message = err.message || 'Failed to connect to local server';
         }
 
         updateMessage(chatId, assistantMessageId, { executionSteps: [...steps] });
         
-        // Small delay between steps
-        await new Promise((r) => setTimeout(r, 300));
+        // Small delay between steps for UI update
+        await new Promise((r) => setTimeout(r, 100));
       }
 
       // Finalize message
       const allSuccessful = steps.every((s) => s.status === 'complete');
+      const failedSteps = steps.filter((s) => s.status === 'error');
+      
+      let finalContent = planData.thinking || '';
+      if (allSuccessful) {
+        finalContent += '\n\n✅ All steps completed successfully!';
+      } else if (failedSteps.length > 0) {
+        finalContent += `\n\n⚠️ ${failedSteps.length} step(s) failed. Check the details above.`;
+      }
+      
       updateMessage(chatId, assistantMessageId, {
         isExecuting: false,
-        content: allSuccessful 
-          ? (planData.thinking || 'Task completed successfully!')
-          : 'Some steps failed. Please check the execution details.',
+        content: finalContent,
       });
 
     } catch (error: any) {
       console.error('Chat error:', error);
       updateMessage(chatId, assistantMessageId, {
         isExecuting: false,
-        content: `Error: ${error.message}`,
+        content: `❌ Error: ${error.message}`,
         executionSteps: [],
       });
     } finally {
