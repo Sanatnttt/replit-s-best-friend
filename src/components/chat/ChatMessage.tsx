@@ -8,10 +8,10 @@ interface ChatMessageProps {
 
 function StepIndicator({ step }: { step: ExecutionStep }) {
   const statusIcon = {
-    pending: <Circle className="w-4 h-4 text-muted-foreground" />,
-    running: <Loader2 className="w-4 h-4 text-primary animate-spin" />,
-    complete: <CheckCircle2 className="w-4 h-4 text-success" />,
-    error: <XCircle className="w-4 h-4 text-destructive" />,
+    pending: <Circle className="w-3 h-3 text-muted-foreground" />,
+    running: <Loader2 className="w-3 h-3 text-primary animate-spin" />,
+    complete: <CheckCircle2 className="w-3 h-3 text-green-500" />,
+    error: <XCircle className="w-3 h-3 text-red-500" />,
   };
 
   const actionLabels: Record<string, string> = {
@@ -24,77 +24,67 @@ function StepIndicator({ step }: { step: ExecutionStep }) {
   };
 
   return (
-    <div className="flex items-start gap-3 py-2">
+    <div className="flex items-center gap-2 py-1.5 text-sm">
       {statusIcon[step.status]}
-      <div className="flex-1 min-w-0">
-        <div className="text-sm">
-          <span className="font-medium">{actionLabels[step.action] || step.action}</span>
-          {step.target && <span className="text-muted-foreground"> → {step.target}</span>}
-          {step.value && <span className="text-muted-foreground"> "{step.value}"</span>}
-        </div>
-        {step.message && (
-          <div className={cn(
-            'text-xs mt-1',
-            step.status === 'error' ? 'text-destructive' : 'text-muted-foreground'
-          )}>
-            {step.message}
-          </div>
-        )}
-      </div>
+      <span className="text-muted-foreground">
+        {actionLabels[step.action] || step.action}
+        {step.target && ` → ${step.target}`}
+        {step.value && ` "${step.value}"`}
+      </span>
     </div>
   );
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
-  const isAssistant = message.role === 'assistant';
+  const isUser = message.role === 'user';
   const hasSteps = message.executionSteps && message.executionSteps.length > 0;
 
   return (
-    <div className={cn(
-      'flex gap-4 py-6 px-4 md:px-8 animate-fade-in',
-      isAssistant ? 'bg-card/30' : ''
-    )}>
-      {/* Avatar */}
+    <div className={cn('flex gap-3 py-4', isUser ? 'justify-end' : 'justify-start')}>
+      {/* Avatar for assistant */}
+      {!isUser && (
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+          <Bot className="w-4 h-4 text-primary-foreground" />
+        </div>
+      )}
+
+      {/* Message bubble */}
       <div className={cn(
-        'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
-        isAssistant ? 'bg-primary text-primary-foreground' : 'bg-secondary'
+        'max-w-[80%] rounded-2xl px-4 py-3',
+        isUser 
+          ? 'bg-primary text-primary-foreground' 
+          : 'bg-secondary text-foreground'
       )}>
-        {isAssistant ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-3">
-        {/* Message text */}
-        {message.content && (
-          <div className="text-foreground whitespace-pre-wrap">
-            {message.content}
-          </div>
-        )}
-
         {/* Loading indicator */}
         {message.isExecuting && !message.content && !hasSteps && (
           <div className="flex items-center gap-2 text-muted-foreground">
-            <div className="flex gap-1">
-              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse-dot" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse-dot" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse-dot" style={{ animationDelay: '300ms' }} />
-            </div>
+            <Loader2 className="w-4 h-4 animate-spin" />
             <span className="text-sm">Thinking...</span>
           </div>
         )}
 
+        {/* Message text */}
+        {message.content && (
+          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+        )}
+
         {/* Execution steps */}
         {hasSteps && (
-          <div className="border border-border rounded-lg p-4 bg-background/50">
-            <div className="text-xs font-medium text-muted-foreground mb-2">EXECUTION STEPS</div>
-            <div className="divide-y divide-border">
-              {message.executionSteps!.map((step) => (
-                <StepIndicator key={step.id} step={step} />
-              ))}
-            </div>
+          <div className="mt-3 pt-3 border-t border-border/30">
+            <div className="text-xs font-medium text-muted-foreground mb-2">Steps:</div>
+            {message.executionSteps!.map((step) => (
+              <StepIndicator key={step.id} step={step} />
+            ))}
           </div>
         )}
       </div>
+
+      {/* Avatar for user */}
+      {isUser && (
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+          <User className="w-4 h-4 text-muted-foreground" />
+        </div>
+      )}
     </div>
   );
 }
