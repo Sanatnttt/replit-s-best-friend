@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Plus, Globe, Zap } from 'lucide-react';
 import { useChatStore } from '@/stores/chatStore';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function ChatInput() {
@@ -53,14 +52,18 @@ export function ChatInput() {
           />
 
           {/* Send button */}
-          <Button
+          <button
             onClick={handleSubmit}
             disabled={!input.trim() || isLoading}
-            size="icon"
-            className="absolute right-2 bottom-2 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-30"
+            className={cn(
+              'absolute right-2 bottom-2 p-2 rounded-full transition-colors',
+              input.trim() && !isLoading
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground'
+            )}
           >
             <Send className="w-4 h-4" />
-          </Button>
+          </button>
         </div>
 
         {/* Quick actions */}
