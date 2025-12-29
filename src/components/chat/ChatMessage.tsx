@@ -1,12 +1,15 @@
-import { Bot, User, CheckCircle2, XCircle, Loader2, Circle } from 'lucide-react';
+import { Bot, User, CheckCircle2, XCircle, Loader2, Circle, Image } from 'lucide-react';
 import { Message, ExecutionStep } from '@/stores/chatStore';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
 
 interface ChatMessageProps {
   message: Message;
 }
 
 function StepIndicator({ step }: { step: ExecutionStep }) {
+  const [showScreenshot, setShowScreenshot] = useState(false);
+  
   const statusIcon = {
     pending: <Circle className="w-3 h-3 text-muted-foreground" />,
     running: <Loader2 className="w-3 h-3 text-primary animate-spin" />,
@@ -14,23 +17,34 @@ function StepIndicator({ step }: { step: ExecutionStep }) {
     error: <XCircle className="w-3 h-3 text-red-500" />,
   };
 
-  const actionLabels: Record<string, string> = {
-    navigate: 'Navigate to',
-    click: 'Click',
-    type: 'Type',
-    wait: 'Wait',
-    scroll: 'Scroll',
-    screenshot: 'Screenshot',
-  };
-
   return (
-    <div className="flex items-center gap-2 py-1.5 text-sm">
-      {statusIcon[step.status]}
-      <span className="text-muted-foreground">
-        {actionLabels[step.action] || step.action}
-        {step.target && ` → ${step.target}`}
-        {step.value && ` "${step.value}"`}
-      </span>
+    <div className="py-1.5">
+      <div className="flex items-center gap-2 text-sm">
+        {statusIcon[step.status]}
+        <span className="text-foreground flex-1">
+          {step.description || `${step.action}: ${step.target || step.value || ''}`}
+        </span>
+        {step.screenshot && (
+          <button 
+            onClick={() => setShowScreenshot(!showScreenshot)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Image className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {step.message && step.status === 'error' && (
+        <div className="text-xs text-red-400 mt-1 ml-5">{step.message}</div>
+      )}
+      {showScreenshot && step.screenshot && (
+        <div className="mt-2 ml-5">
+          <img 
+            src={`data:image/png;base64,${step.screenshot}`} 
+            alt="Screenshot" 
+            className="rounded-lg border border-border max-w-full"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -50,7 +64,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
       {/* Message bubble */}
       <div className={cn(
-        'max-w-[80%] rounded-2xl px-4 py-3',
+        'max-w-[85%] rounded-2xl px-4 py-3',
         isUser 
           ? 'bg-primary text-primary-foreground' 
           : 'bg-secondary text-foreground'
@@ -59,7 +73,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {message.isExecuting && !message.content && !hasSteps && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm">Thinking...</span>
+            <span className="text-sm">Planning automation...</span>
           </div>
         )}
 
@@ -71,7 +85,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {/* Execution steps */}
         {hasSteps && (
           <div className="mt-3 pt-3 border-t border-border/30">
-            <div className="text-xs font-medium text-muted-foreground mb-2">Steps:</div>
+            <div className="text-xs font-medium text-muted-foreground mb-2">
+              {message.isExecuting ? 'Executing...' : 'Execution Steps:'}
+            </div>
             {message.executionSteps!.map((step) => (
               <StepIndicator key={step.id} step={step} />
             ))}
