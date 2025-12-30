@@ -8,6 +8,12 @@ export interface Message {
   timestamp: Date;
   isExecuting?: boolean;
   executionSteps?: ExecutionStep[];
+  userData?: {
+    fullName: string;
+    email: string;
+    username: string;
+    password: string;
+  };
 }
 
 export interface ExecutionStep {
@@ -37,7 +43,6 @@ interface ChatState {
   localServerUrl: string;
   isLocalServerConnected: boolean;
 
-  // Actions
   createChat: () => string;
   deleteChat: (chatId: string) => void;
   setActiveChat: (chatId: string) => void;
@@ -48,8 +53,6 @@ interface ChatState {
   setLoading: (loading: boolean) => void;
   setLocalServerUrl: (url: string) => void;
   checkLocalServer: () => Promise<boolean>;
-
-  // AI execution
   sendMessage: (content: string) => Promise<void>;
 }
 
@@ -167,7 +170,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (content) => {
     const { activeChatId, createChat, addMessage, updateMessage, setLoading, localServerUrl, checkLocalServer } = get();
     
-    // Create chat if none exists
     let chatId = activeChatId;
     if (!chatId) {
       chatId = createChat();
@@ -188,7 +190,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 {
                   id: assistantMessageId,
                   role: 'assistant' as const,
-                  content: '',
+                  content: '🧠 Analyzing with DeepSeek AI...',
                   timestamp: new Date(),
                   isExecuting: true,
                   executionSteps: [],
@@ -202,17 +204,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setLoading(true);
 
     try {
-      // Check if local server is running
+      // Check local server
       const isConnected = await checkLocalServer();
 
-      // Get chat history
+      // Get chat history for context
       const currentChat = get().chats.find((c) => c.id === chatId);
       const history = currentChat?.messages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
       })) || [];
 
-      // Call AI planner
+      // Call DeepSeek AI planner via edge function
       const { data: planData, error: planError } = await supabase.functions.invoke('agent-planner', {
         body: { 
           description: content,
@@ -221,6 +223,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       if (planError) throw planError;
+      
+      if (planData.error) {
+        throw new Error(planData.error);
+      }
 
       const steps: ExecutionStep[] = (planData.steps || []).map((step: any) => ({
         id: crypto.randomUUID(),
@@ -231,21 +237,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
         status: 'pending' as const,
       }));
 
-      // Update with planned steps
+      // Update message with plan and user data
       updateMessage(chatId, assistantMessageId, {
-        content: planData.thinking || 'I will help you with that task.',
+        content: planData.thinking || 'Executing automation plan...',
         executionSteps: steps,
+        userData: planData.userData,
       });
 
+      // If local server not connected, show instructions
       if (!isConnected) {
+        const credsInfo = planData.userData 
+          ? `\n\n📋 **Generated credentials:**\n- Email: \`${planData.userData.email}\`\n- Username: \`${planData.userData.username}\`\n- Password: \`${planData.userData.password}\``
+          : '';
+          
         updateMessage(chatId, assistantMessageId, {
-          content: `${planData.thinking || 'Here is my plan.'}\n\n⚠️ **Local server not running!**\n\nTo execute these steps, start the local server:\n\`\`\`\ncd local-server\nnpm install\nnpm start\n\`\`\``,
+          content: `${planData.thinking || 'Plan ready.'}\n\n⚠️ **Local server not running!**\n\nStart the automation server:\n\`\`\`bash\ncd local-server\nnpm install\nnpm start\n\`\`\`${credsInfo}`,
           isExecuting: false,
         });
         return;
       }
 
-      // Execute each step via local server
+      // Execute each step via local server (REAL EXECUTION)
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         
@@ -265,26 +277,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
           steps[i].status = result.success ? 'complete' : 'error';
           steps[i].message = result.message;
           steps[i].screenshot = result.screenshot;
+          
         } catch (err: any) {
           steps[i].status = 'error';
-          steps[i].message = err.message || 'Failed to connect to local server';
+          steps[i].message = err.message || 'Failed to execute step';
         }
 
         updateMessage(chatId, assistantMessageId, { executionSteps: [...steps] });
         
-        // Small delay between steps for UI update
+        // Small delay for UI update
         await new Promise((r) => setTimeout(r, 100));
       }
 
-      // Finalize message
-      const allSuccessful = steps.every((s) => s.status === 'complete');
-      const failedSteps = steps.filter((s) => s.status === 'error');
+      // Final summary
+      const successCount = steps.filter((s) => s.status === 'complete').length;
+      const errorCount = steps.filter((s) => s.status === 'error').length;
       
       let finalContent = planData.thinking || '';
-      if (allSuccessful) {
-        finalContent += '\n\n✅ All steps completed successfully!';
-      } else if (failedSteps.length > 0) {
-        finalContent += `\n\n⚠️ ${failedSteps.length} step(s) failed. Check the details above.`;
+      
+      if (planData.userData) {
+        finalContent += `\n\n📋 **Credentials used:**\n- Email: \`${planData.userData.email}\`\n- Username: \`${planData.userData.username}\`\n- Password: \`${planData.userData.password}\``;
+      }
+      
+      if (errorCount === 0) {
+        finalContent += `\n\n✅ All ${successCount} steps completed successfully!`;
+      } else {
+        finalContent += `\n\n⚠️ ${successCount} succeeded, ${errorCount} failed.`;
       }
       
       updateMessage(chatId, assistantMessageId, {
